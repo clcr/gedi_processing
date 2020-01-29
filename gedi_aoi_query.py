@@ -3,10 +3,10 @@ import geopandas as gp
 import pandas as pd
 import geopandas
 import matplotlib.pyplot as plt
-
+from tempfile import TemporaryDirectory
+import subprocess
 import os
 import argparse
-
 
 
 def gedi_aoi_process(gedi_dir, out_path, aoi_path, product_list):
@@ -27,6 +27,7 @@ def gedi_aoi_process(gedi_dir, out_path, aoi_path, product_list):
     aoi_overlay = gp.read_file(aoi_path)
     gdf_list = []
     for gedi_file in gedi_file_list:
+            print("Processing {}".format(gedi_file))
             gedi_swath = h5py.File(gedi_file, 'r')
             for beam in gedi_swath.values():
                 try:
@@ -45,9 +46,14 @@ def gedi_aoi_process(gedi_dir, out_path, aoi_path, product_list):
                     gdf_list.append(filtered_gdf)
                 except KeyError:
                     print("Key missing")
-                continue
     final_gdf = pd.concat(gdf_list)
-    final_gdf.to_file(out_path)
+    with TemporaryDirectory() as td:
+        # Geopandas writes to geojson quicker than it writes to .shp
+        temp_geojson = os.path.join(td, "json")
+        print("Creating temporary geojson at {}".format(temp_geojson))
+        final_gdf.to_file(temp_geojson, driver="GeoJSON")
+        print("Running ogr2ogr")
+        subprocess.run(["ogr2ogr", "-f", "ESRI Shapefile", out_path, temp_geojson])
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ import subprocess
 import os
 import argparse
 
+import ogr
 
 def gedi_aoi_process(gedi_dir, out_path, aoi_path, product_list):
     """
@@ -24,28 +25,26 @@ def gedi_aoi_process(gedi_dir, out_path, aoi_path, product_list):
                       in os.listdir(gedi_dir)
                       if file_name.endswith('.h5')]
     gedi_file_list.sort()
-    aoi_overlay = gp.read_file(aoi_path)
+    aoi_dataset = ogr.Open(aoi_path)
+    aoi_min_x, aoi_min_y, aoi_max_x, aoi_max_y = aoi_dataset.GetLayerByIndex(0).GetExtent()
     gdf_list = []
     for gedi_file in gedi_file_list:
-            print("Processing {}".format(gedi_file))
-            gedi_swath = h5py.File(gedi_file, 'r')
-            for beam in gedi_swath.values():
-                try:
-                    lats = beam["geolocation"]["latitude_bin0"]
-                    lons = beam["geolocation"]["longitude_bin0"]
-                    product_dict = {product: beam[product] for product in product_list}
-                    product_dict.update({
-                        'Latitude': lats,
-                        'Longitude': lons
-                    })
-                    df = pd.DataFrame(product_dict)
-                    gdf = gp.GeoDataFrame(df, geometry = gp.points_from_xy(df.Longitude, df.Latitude))
-                    filtered_gdf = gdf[gdf.geometry.within(aoi_overlay.geometry[0])]
-                    if len(filtered_gdf) == 0:
-                        continue
-                    gdf_list.append(filtered_gdf)
-                except KeyError:
-                    print("Key missing")
+        print("Processing {}".format(gedi_file))
+        gedi_swath = h5py.File(gedi_file, 'r')
+        for beam in gedi_swath.values():
+            try:
+                lats = beam["geolocation"]["latitude_bin0"]
+                lons = beam["geolocation"]["longitude_bin0"]
+                product_dict = {product: beam[product] for product in product_list}
+                product_dict.update({
+                    'Latitude': lats,
+                    'Longitude': lons
+                })
+
+
+
+            except KeyError:
+                print("Key missing")
     final_gdf = pd.concat(gdf_list)
     with TemporaryDirectory() as td:
         # Geopandas writes to geojson quicker than it writes to .shp
@@ -54,6 +53,9 @@ def gedi_aoi_process(gedi_dir, out_path, aoi_path, product_list):
         final_gdf.to_file(temp_geojson, driver="GeoJSON")
         print("Running ogr2ogr")
         subprocess.run(["ogr2ogr", "-f", "ESRI Shapefile", out_path, temp_geojson])
+
+
+def filter_hdf_to_shape()
 
 
 if __name__ == "__main__":
